@@ -8,6 +8,7 @@ permissions:
   id-token: write # for creating OIDC tokens for signing.
   packages: write # for uploading attestations.
   contents: read
+  pull-requests: read # merged PR lookup (dev → test) when resolving dev tip SHA
   security-events: write # Required for uploading code scanning.
 env:
   JF_RT_URL: "https://psazuse.jfrog.io"
@@ -16,6 +17,9 @@ env:
   DEFAULT_WORKSPACE: "${{github.workspace}}" 
   REPO_LOCAL_TEST: "prbranch-bpr-test-local"
   RT_REPO_LOCAL_PROD: "prbranch-bpr-prod-local"
+  # Must match .github/workflows/build-create.yml (DEV publish uses these for build-info)
+  BUILD_NAME: "prbranch-bpr-app"
+  DEV_BUILD_WORKFLOW: "build-create.yml"
 
 jobs:
   buildPromote2Test: 
@@ -41,20 +45,60 @@ jobs:
             oidc-provider-name: ${{vars.JF_OIDC_PROVIDER_NAME}}
             disable-job-summary: ${{env.JOB_SUMMARY}}
 
-        - name: "Query previous info"
+        - name: Checkout
+          uses: actions/checkout@v6
+          with:
+            fetch-depth: 0
+
+        - name: "Resolve DEV build from merged PR / merge commit"
+          env:
+            GH_TOKEN: ${{ github.token }}
           run: |
-              echo "repo: ${{env.REPO_LOCAL_TEST}}"
+            set -euo pipefail
+            git fetch origin dev
 
-              echo "Current branch ${git branch --show-current}"
-              echo "HEAD: $(git merge-base --is-ancestor develop HEAD)"
-              # git merge-base --is-ancestor develop HEAD && echo "From develop" || echo "Not from develop"
+            echo "## Resolve dev tip for this test update" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
 
-              echo "BUILD_NAME='HelloWorld'" >> $GITHUB_ENV
-              echo "BUILD_ID=$(date +'%Y-%m-%d-%H-%M')" >> $GITHUB_ENV
+            DEV_SHA=""
+            if git rev-parse -q --verify HEAD^2 >/dev/null 2>&1; then
+              DEV_SHA="$(git rev-parse HEAD^2)"
+              echo "Using merge commit second parent as dev tip: ${DEV_SHA}"
+              echo "- **Strategy:** merge commit \`HEAD^2\`" >> "$GITHUB_STEP_SUMMARY"
+            else
+              PR_JSON="$(gh pr list --repo "${GITHUB_REPOSITORY}" --base test --head dev --state merged --limit 1 --json number,title,headSha,url 2>/dev/null || echo '[]')"
+              PR_HEAD="$(echo "${PR_JSON}" | jq -r '.[0].headSha // empty')"
+              if [ -n "${PR_HEAD}" ] && [ "${PR_HEAD}" != "null" ]; then
+                DEV_SHA="${PR_HEAD}"
+                echo "Using merged PR dev → test head commit: ${DEV_SHA}"
+                echo "${PR_JSON}" | jq -r '.[] | "- **PR #\(.number):** \(.title)\n  - [\(.url)](\(.url))\n  - **headSha:** `\(.headSha)`"' >> "$GITHUB_STEP_SUMMARY"
+              else
+                DEV_SHA="$(git rev-parse HEAD)"
+                echo "No second parent and no merged PR test←dev; assuming fast-forward: ${DEV_SHA}"
+                echo "- **Strategy:** current \`HEAD\` (fast-forward or direct push)" >> "$GITHUB_STEP_SUMMARY"
+              fi
+            fi
 
+            echo "- **dev tip SHA:** \`${DEV_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
-        - name: "Promote to ${{env.ENV}}"
-            # jf rt promote ${{env.BUILD_NAME}} ${{env.BUILD_ID}} ${{env.REPO_LOCAL_TEST}}
+            RUN_NUMBER="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${DEV_BUILD_WORKFLOW}/runs?head_sha=${DEV_SHA}&branch=dev&per_page=30" \
+              --jq '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.created_at) | reverse | .[0].run_number // empty')"
+
+            if [ -z "${RUN_NUMBER}" ] || [ "${RUN_NUMBER}" = "null" ]; then
+              echo "::error::No successful workflow run for ${DEV_BUILD_WORKFLOW} on branch dev at head_sha=${DEV_SHA}. Push to dev (or re-run DEV build) before promoting."
+              exit 1
+            fi
+
+            BUILD_ID="${RUN_NUMBER}.0"
+            echo "BUILD_ID=${BUILD_ID}" >> "${GITHUB_ENV}"
+            echo "Resolved BUILD_NAME=${BUILD_NAME} BUILD_ID=${BUILD_ID} (workflow run_number=${RUN_NUMBER})"
+            echo "- **build-create run_number:** ${RUN_NUMBER}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **BUILD_ID:** \`${BUILD_ID}\`" >> "$GITHUB_STEP_SUMMARY"
+
+        - name: "Promote to TEST"
           run: |
-            echo "promote name: ${{env.BUILD_NAME}}, id: ${{env.BUILD_ID}}, repo: ${{env.REPO_LOCAL_TEST}}"
-
+            set -euo pipefail
+            echo "Promoting build '${BUILD_NAME}' #${BUILD_ID} → ${{ env.REPO_LOCAL_TEST }}"
+            # JFrog CLI v2: build promotion is `build-promote` (alias `bpr`), not `rt promote`
+            jf rt build-promote "${BUILD_NAME}" "${BUILD_ID}" "${{ env.REPO_LOCAL_TEST }}"
