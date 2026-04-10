@@ -26,13 +26,15 @@ env:
 
 jobs:
   buildPublish: 
-    name: "Create Build and Publish"
+    name: "DEV: Create Build and Publish "
     runs-on: ubuntu-latest
     env:
       BAD_DEPS_DIR: "${{ github.workspace }}/.jfrog/bad-deps"
     defaults:
         run:
           working-directory: "${{env.DEFAULT_WORKSPACE}}"
+        # This will evaluate to true for "DEV", "Dev", or "dev"
+    if: ${{ github.ref_name == 'dev' }}
     steps:
         - name: "Setup JFrog CLI"
           uses: jfrog/setup-jfrog-cli@v4  # 
