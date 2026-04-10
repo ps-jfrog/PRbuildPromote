@@ -66,12 +66,13 @@ jobs:
               echo "Using merge commit second parent as dev tip: ${DEV_SHA}"
               echo "- **Strategy:** merge commit \`HEAD^2\`" >> "$GITHUB_STEP_SUMMARY"
             else
-              PR_JSON="$(gh pr list --repo "${GITHUB_REPOSITORY}" --base test --head dev --state merged --limit 1 --json number,title,headSha,url 2>/dev/null || echo '[]')"
-              PR_HEAD="$(echo "${PR_JSON}" | jq -r '.[0].headSha // empty')"
+              # gh pr list order is not merge-time; take latest merged dev→test by mergedAt
+              PR_JSON="$(gh pr list --repo "${GITHUB_REPOSITORY}" --base test --head dev --state merged --limit 30 --json number,title,headSha,url,mergedAt 2>/dev/null || echo '[]')"
+              PR_HEAD="$(echo "${PR_JSON}" | jq -r 'sort_by(.mergedAt) | reverse | if length > 0 then .[0].headSha else empty end')"
               if [ -n "${PR_HEAD}" ] && [ "${PR_HEAD}" != "null" ]; then
                 DEV_SHA="${PR_HEAD}"
                 echo "Using merged PR dev → test head commit: ${DEV_SHA}"
-                echo "${PR_JSON}" | jq -r '.[] | "- **PR #\(.number):** \(.title)\n  - [\(.url)](\(.url))\n  - **headSha:** `\(.headSha)`"' >> "$GITHUB_STEP_SUMMARY"
+                echo "${PR_JSON}" | jq -r 'sort_by(.mergedAt) | reverse | if length > 0 then .[0] | "- **PR #\(.number):** \(.title)\n  - [\(.url)](\(.url))\n  - **headSha:** `\(.headSha)`" else empty end' >> "$GITHUB_STEP_SUMMARY"
               else
                 DEV_SHA="$(git rev-parse HEAD)"
                 echo "No second parent and no merged PR test←dev; assuming fast-forward: ${DEV_SHA}"
@@ -81,9 +82,16 @@ jobs:
 
             echo "- **dev tip SHA:** \`${DEV_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
-            RUN_NUMBER="$(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${DEV_BUILD_WORKFLOW}/runs?head_sha=${DEV_SHA}&branch=dev&per_page=30" \
-              --jq '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.created_at) | reverse | .[0].run_number // empty')"
+            # build-create only runs on push to dev; head_sha + event=push avoids branch filter quirks vs the old branch=dev+head_sha query
+            RUN_NUMBER=""
+            for qs in "head_sha=${DEV_SHA}&event=push&per_page=100" "head_sha=${DEV_SHA}&branch=dev&event=push&per_page=100" "head_sha=${DEV_SHA}&branch=dev&per_page=100"; do
+              RUN_NUMBER="$(gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/${DEV_BUILD_WORKFLOW}/runs?${qs}" \
+                --jq '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.created_at) | reverse | .[0].run_number // empty')"
+              if [ -n "${RUN_NUMBER}" ] && [ "${RUN_NUMBER}" != "null" ]; then
+                break
+              fi
+            done
 
             if [ -z "${RUN_NUMBER}" ] || [ "${RUN_NUMBER}" = "null" ]; then
               echo "::error::No successful workflow run for ${DEV_BUILD_WORKFLOW} on branch dev at head_sha=${DEV_SHA}. Push to dev (or re-run DEV build) before promoting."

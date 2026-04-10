@@ -15,8 +15,8 @@ case "${branch}" in
     echo "Create PR from dev to test"
     # Create Promotion Branch
     git checkout -b promote/dev-to-test
-    # Merge dev into Promotion Branch
-    git merge dev
+    # Merge dev into Promotion Branch (non-interactive: no editor for merge message)
+    git merge dev --no-edit
     git push origin promote/dev-to-test
 
     # Merge into test
@@ -27,6 +27,8 @@ case "${branch}" in
     # Cleanup 
     git branch -d promote/dev-to-test
     git push origin --delete promote/dev-to-test
+
+    git checkout dev
     ;;
   *)
     echo "Error: Invalid argument."
