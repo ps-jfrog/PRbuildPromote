@@ -18,7 +18,7 @@ if [ -z "$(git diff origin/test)" ]; then
     exit 1
 fi
 # Checkout Latest
-git pull origin dev
+# git pull origin dev
 git checkout test
 
 git pull origin test
