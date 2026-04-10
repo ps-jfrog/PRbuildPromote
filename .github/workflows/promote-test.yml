@@ -1,9 +1,8 @@
-name: "Build Promote"
+name: "TEST: Build Promote"
 on:
   push:
     branches: 
       - 'test'
-      - 'main'
 permissions:
   actions: read # for detecting the Github Actions environment.
   id-token: write # for creating OIDC tokens for signing.
