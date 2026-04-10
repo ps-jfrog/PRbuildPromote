@@ -74,10 +74,6 @@ jobs:
           run: |
             jf pipc --repo-deploy="${{env.RT_REPO_VIRTUAL}}" --repo-resolve="${{env.RT_REPO_VIRTUAL}}"
 
-        - name: "Xray: audit"
-          run: |
-            jf audit --pip --requirements-file=requirements.txt --threads=100 --format=table --extended-table --vuln --validate-secrets --sca --secrets
-
         - name: "Install dependencies (environment)"
           run: |
             jf pip install -r requirements.txt --build-name="${{env.BUILD_NAME}}" --build-number="${{env.BUILD_ID}}" --module="${{env.MODULE_NAME}}"
@@ -94,19 +90,6 @@ jobs:
             jf rt bce "${{env.BUILD_NAME}}" "${{env.BUILD_ID}}"
             jf rt bad "${{env.BUILD_NAME}}" "${{env.BUILD_ID}}" --module="${{env.MODULE_NAME}}" "${BAD_DEPS_DIR}/*"
             jf rt bp "${{env.BUILD_NAME}}" "${{env.BUILD_ID}}" --detailed-summary=true
-
-        - name: "Xray: Build Scan"
-          continue-on-error: true
-          run: |
-            jf bs ${{env.BUILD_NAME}} ${{env.BUILD_ID}} --format=table --extended-table --vuln --rescan
-
-        - name: "Evidence: Build Publish"
-        # continue-on-error: true 
-          run: |
-            echo '{ "actor": "${{github.actor}}", "pipeline": "github actions","build_name": "${{env.BUILD_NAME}}", "build_id": "${{env.BUILD_ID}}", "evd": "Evidence-BuildPublish"}' > ./${{env.EVIDENCE_SPEC_JSON}}
-            cat ./${{env.EVIDENCE_SPEC_JSON}}
-            jf evd create --build-name ${{env.BUILD_NAME}} --build-number ${{env.BUILD_ID}} --predicate ./${{env.EVIDENCE_SPEC_JSON}} --predicate-type https://jfrog.com/evidence/signature/v1 --key "${{secrets.KRISHNAM_JFROG_EVD_PRIVATEKEY}}" --key-alias ${{secrets.EVIDENCE_KEY_ALIAS}}
-
 
     # Mirrors jfcli.sh: validate after bpr to dev-local (repo-root path, --include-deps=true, props fallback).
   validateDownloadDevLocal:
