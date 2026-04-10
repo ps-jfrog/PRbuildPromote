@@ -6,19 +6,8 @@ if [ "$(git branch --show-current)" != "dev" ]; then
     exit 1
 fi
 
-# Check if the test branch exists
-if [ -z "$(git branch --list test)" ]; then
-    echo "Error: The test branch does not exist"
-    exit 1
-fi
-
-# Check if the test branch is up to date
-if [ -z "$(git diff origin/test)" ]; then
-    echo "Error: The test branch is not up to date"
-    exit 1
-fi
 # Checkout Latest
-# git pull origin dev
+git pull origin dev
 git checkout test
 
 git pull origin test
