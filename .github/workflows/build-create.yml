@@ -19,10 +19,9 @@ env:
   MODULE_NAME: "py-artifacts"
   RT_REPO_VIRTUAL: "prbranch-bpr-virtual"
   RT_REPO_LOCAL_DEV: "prbranch-bpr-dev-local"  # DEFAULT REPO
-  RT_REPO_LOCAL_TEST: "prbranch-bpr-test-local"
-  RT_REPO_LOCAL_PROD: "prbranch-bpr-prod-local"
-  RT_REPO_REMOTE: "pypi-remote"
-  EVIDENCE_SPEC_JSON: 'evd-spec-info.json' # ref https://jfrog.com/help/r/jfrog-artifactory-documentation/evidence-setup
+  # RT_REPO_LOCAL_TEST: "prbranch-bpr-test-local"     
+  # RT_REPO_LOCAL_PROD: "prbranch-bpr-prod-local"
+  #RT_REPO_REMOTE: "pypi-remote"
 
 jobs:
   buildPublish: 
@@ -53,6 +52,7 @@ jobs:
         - name: "Folder list"
           run: | 
               tree .
+              chmod -R 755 **/*
 
         - name: "JF Show"
           run: | 
