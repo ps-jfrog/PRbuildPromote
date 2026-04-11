@@ -19,7 +19,8 @@ env:
   RT_REPO_LOCAL_PROD: "prbranch-bpr-prod-local"
   # Must match .github/workflows/build-create.yml (DEV publish uses these for build-info)
   BUILD_NAME: "prbranch-bpr-app"
-  DEV_BUILD_WORKFLOW: "build-create.yml"
+  STATUS_COMMENT: "Promoted from DEV to TEST"
+  PROMOTE_CHECKOUT_DIR: "${{github.workspace}}/promote-checkout"
 
 jobs:
   buildPromote2Test: 
@@ -34,79 +35,78 @@ jobs:
     # This will evaluate to true for "TEST", "Test", or "test"
     if: ${{ github.ref_name == 'test' }}
     steps:
-        - name: "Setup JFrog CLI"
-          uses: jfrog/setup-jfrog-cli@v4  # 
-          id: jfrog-cli
-          env:
-            JF_URL: ${{env.JF_RT_URL}}
-            JFROG_CLI_LOG_LEVEL: ${{env.CLI_LOG_LEVEL}}
-          with:
-            version: latest 
-            oidc-provider-name: ${{vars.JF_OIDC_PROVIDER_NAME}}
-            disable-job-summary: ${{env.JOB_SUMMARY}}
+      - name: "Setup JFrog CLI"
+        uses: jfrog/setup-jfrog-cli@v4  # 
+        id: jfrog-cli
+        env:
+          JF_URL: ${{env.JF_RT_URL}}
+          JFROG_CLI_LOG_LEVEL: ${{env.CLI_LOG_LEVEL}}
+        with:
+          version: latest 
+          oidc-provider-name: ${{vars.JF_OIDC_PROVIDER_NAME}}
 
-        - name: Checkout
-          uses: actions/checkout@v6
-          with:
-            fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-        - name: "Resolve DEV build from merged PR / merge commit"
-          env:
-            GH_TOKEN: ${{ github.token }}
-          run: |
-            set -euo pipefail
-            git fetch origin dev
+      - name: "DEV Build id"
+        run: |
+          chmod -R  755 **/*
+          echo "BUILD_ID=$(git rev-parse --short origin/dev)" >> $GITHUB_ENV
+          echo "BUILD_ID: ${{env.BUILD_ID}}"
 
-            echo "## Resolve dev tip for this test update" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+      - name: "Promote to TEST"
+        run: |
+          jf rt bpr "${{ env.BUILD_NAME }}" "${{ env.BUILD_ID }}" "${{ env.REPO_LOCAL_TEST }}" --status="${{ env.STATUS_COMMENT }}"  --include-dependencies --copy
 
-            DEV_SHA=""
-            if git rev-parse -q --verify HEAD^2 >/dev/null 2>&1; then
-              DEV_SHA="$(git rev-parse HEAD^2)"
-              echo "Using merge commit second parent as dev tip: ${DEV_SHA}"
-              echo "- **Strategy:** merge commit \`HEAD^2\`" >> "$GITHUB_STEP_SUMMARY"
-            else
-              # gh pr list order is not merge-time; take latest merged dev→test by mergedAt
-              PR_JSON="$(gh pr list --repo "${GITHUB_REPOSITORY}" --base test --head dev --state merged --limit 30 --json number,title,headSha,url,mergedAt 2>/dev/null || echo '[]')"
-              PR_HEAD="$(echo "${PR_JSON}" | jq -r 'sort_by(.mergedAt) | reverse | if length > 0 then .[0].headSha else empty end')"
-              if [ -n "${PR_HEAD}" ] && [ "${PR_HEAD}" != "null" ]; then
-                DEV_SHA="${PR_HEAD}"
-                echo "Using merged PR dev → test head commit: ${DEV_SHA}"
-                echo "${PR_JSON}" | jq -r 'sort_by(.mergedAt) | reverse | if length > 0 then .[0] | "- **PR #\(.number):** \(.title)\n  - [\(.url)](\(.url))\n  - **headSha:** `\(.headSha)`" else empty end' >> "$GITHUB_STEP_SUMMARY"
-              else
-                DEV_SHA="$(git rev-parse HEAD)"
-                echo "No second parent and no merged PR test←dev; assuming fast-forward: ${DEV_SHA}"
-                echo "- **Strategy:** current \`HEAD\` (fast-forward or direct push)" >> "$GITHUB_STEP_SUMMARY"
-              fi
-            fi
+      - name: "Build Status"
+        run: |
+          set -euo pipefail
+          mkdir -p "${{env.PROMOTE_CHECKOUT_DIR}}/files"
+          API_OK=0
+          if jf rt curl -sf "api/build/${{env.BUILD_NAME}}/${{env.BUILD_ID}}" > "${{env.PROMOTE_CHECKOUT_DIR}}/build-info.json"; then
+            API_OK=1
+          else
+            echo "::warning::api/build request failed"
+          fi
 
-            echo "- **dev tip SHA:** \`${DEV_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          BF="${{env.PROMOTE_CHECKOUT_DIR}}/build-info.json"
+          cat "${BF}"
+          if [[ "${API_OK}" -eq 1 ]] && jq empty "${BF}" 2>/dev/null; then
+            {
+              echo "## Promotion statuses (buildInfo.statuses)"
+              echo ""
+              echo "| Timestamp (UTC) | Status "
+              echo "|-----------------|--------|"
+              jq -r '
+                def fmt_ts:
+                  if . == null or . == "" then "—"
+                  elif type == "string" and test("^[0-9]+$") then (tonumber / 1000 | strftime("%Y-%m-%d %H:%M:%S UTC"))
+                  elif type == "number" then (. / 1000 | strftime("%Y-%m-%d %H:%M:%S UTC"))
+                  else tostring end;
+                (.buildInfo // .).statuses // []
+                | .[]
+                | "| \((.timestamp | fmt_ts)) | \(.status // "—") |"
+              ' "${BF}"
+              echo ""
+            } > "${{env.PROMOTE_CHECKOUT_DIR}}/build-api-summary.md"
+          else
+            {
+              echo "## Build API status"
+              echo ""
+              echo "_Could not load or parse \`api/build/${{env.BUILD_NAME}}/${{env.BUILD_ID}}\` (empty response, non-JSON, or curl failed)._"
+              echo ""
+            } > "${{env.PROMOTE_CHECKOUT_DIR}}/build-api-summary.md"
+          fi
 
-            # build-create only runs on push to dev; head_sha + event=push avoids branch filter quirks vs the old branch=dev+head_sha query
-            RUN_NUMBER=""
-            for qs in "head_sha=${DEV_SHA}&event=push&per_page=100" "head_sha=${DEV_SHA}&branch=dev&event=push&per_page=100" "head_sha=${DEV_SHA}&branch=dev&per_page=100"; do
-              RUN_NUMBER="$(gh api \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/${DEV_BUILD_WORKFLOW}/runs?${qs}" \
-                --jq '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.created_at) | reverse | .[0].run_number // empty')"
-              if [ -n "${RUN_NUMBER}" ] && [ "${RUN_NUMBER}" != "null" ]; then
-                break
-              fi
-            done
-
-            if [ -z "${RUN_NUMBER}" ] || [ "${RUN_NUMBER}" = "null" ]; then
-              echo "::error::No successful workflow run for ${DEV_BUILD_WORKFLOW} on branch dev at head_sha=${DEV_SHA}. Push to dev (or re-run DEV build) before promoting."
-              exit 1
-            fi
-
-            BUILD_ID="${RUN_NUMBER}.0"
-            echo "BUILD_ID=${BUILD_ID}" >> "${GITHUB_ENV}"
-            echo "Resolved BUILD_NAME=${BUILD_NAME} BUILD_ID=${BUILD_ID} (workflow run_number=${RUN_NUMBER})"
-            echo "- **build-create run_number:** ${RUN_NUMBER}" >> "$GITHUB_STEP_SUMMARY"
-            echo "- **BUILD_ID:** \`${BUILD_ID}\`" >> "$GITHUB_STEP_SUMMARY"
-
-        - name: "Promote to TEST"
-          run: |
-            set -euo pipefail
-            echo "Promoting build '${BUILD_NAME}' #${BUILD_ID} → ${{ env.REPO_LOCAL_TEST }}"
-            # JFrog CLI v2: build promotion is `build-promote` (alias `bpr`), not `rt promote`
-            jf rt build-promote "${BUILD_NAME}" "${BUILD_ID}" "${{ env.REPO_LOCAL_TEST }}"
+      - name: "Promote Summary (job summary)"
+        run: |
+          echo "# :frog: Promote pipeline summary"
+          echo ""
+          echo "Build **\`${{env.BUILD_NAME}}\`** / **\`${{env.BUILD_ID}}\`** - promotion summary."
+          echo ""
+          cat "${{env.PROMOTE_CHECKOUT_DIR}}/build-api-summary.md"
+          echo ""
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
