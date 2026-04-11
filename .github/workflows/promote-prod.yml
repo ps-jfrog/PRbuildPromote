@@ -17,7 +17,6 @@ env:
   DEFAULT_WORKSPACE: "${{github.workspace}}" 
   RT_REPO_LOCAL_PROD: "prbranch-bpr-prod-local"
   BUILD_NAME: "prbranch-bpr-app"
-  STATUS_COMMENT: "Promoted from TEST to PROD"
 
 jobs:
   buildPromote2Prod: 
@@ -46,63 +45,42 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: "TEST Build id"
+      - name: "Build id"
         run: |
           chmod -R  755 **/*
-          echo "BUILD_ID=$(git rev-parse --short origin/dev)" >> $GITHUB_ENV
-          echo "BUILD_ID: ${{env.BUILD_ID}}"
+          echo "BUILD_ID=$(git rev-parse --short origin/test)" >> $GITHUB_ENV
+          echo "DEV_SHORT_COMMITCODE=$(git rev-parse --short origin/dev)" >> $GITHUB_ENV
+          echo "TEST_SHORT_COMMITCODE=$(git rev-parse --short origin/test)" >> $GITHUB_ENV
+          echo "PROD_SHORT_COMMITCODE=$(git rev-parse --short origin/main)" >> $GITHUB_ENV
 
-      - name: "Promote to TEST"
+      - name: "Promote to PROD"
+        env:
+          STATUS_COMMENT: "Promoted from TEST ${{ env.TEST_SHORT_COMMITCODE }} to PROD ${{ env.PROD_SHORT_COMMITCODE }}"
         run: |
-          jf rt bpr "${{ env.BUILD_NAME }}" "${{ env.BUILD_ID }}" "${{ env.REPO_LOCAL_TEST }}" --status="${{ env.STATUS_COMMENT }}"  --include-dependencies --copy
+          jf rt bpr "${{ env.BUILD_NAME }}" "${{ env.BUILD_ID }}" "${{ env.REPO_LOCAL_PROD }}" --status="${{ env.STATUS_COMMENT }}"  --include-dependencies --copy
 
-      - name: "Build Status"
+      - name: "Promote Summary"
+        env:
+          BUILD_INFO_FILE: "./build-info.json"
         run: |
-          set -euo pipefail
-          mkdir -p "./files"
-          API_OK=0
-          if jf rt curl -sf "api/build/${{env.BUILD_NAME}}/${{env.BUILD_ID}}" > "./build-info.json"; then
-            API_OK=1
-          else
-            echo "::warning::api/build request failed"
-          fi
-
-          BF="./build-info.json"
-          cat "${BF}"
-          if [[ "${API_OK}" -eq 1 ]] && jq empty "${BF}" 2>/dev/null; then
-            {
-              echo "## Promotion statuses (buildInfo.statuses)"
-              echo ""
-              echo "| Timestamp (UTC) | Status "
-              echo "|-----------------|--------|"
-              jq -r '
-                def fmt_ts:
-                  if . == null or . == "" then "—"
-                  elif type == "string" and test("^[0-9]+$") then (tonumber / 1000 | strftime("%Y-%m-%d %H:%M:%S UTC"))
-                  elif type == "number" then (. / 1000 | strftime("%Y-%m-%d %H:%M:%S UTC"))
-                  else tostring end;
-                (.buildInfo // .).statuses // []
-                | .[]
-                | "| \((.timestamp | fmt_ts)) | \(.status // "—") |"
-              ' "${BF}"
-              echo ""
-            } > "./build-api-summary.md"
-          else
-            {
-              echo "## Build API status"
-              echo ""
-              echo "_Could not load or parse \`api/build/${{env.BUILD_NAME}}/${{env.BUILD_ID}}\` (empty response, non-JSON, or curl failed)._"
-              echo ""
-            } > "./build-api-summary.md"
-          fi
-
-      - name: "Promote Summary (job summary)"
-        run: |
-          echo "# :frog: Promote pipeline summary"
-          echo ""
-          echo "Build **\`${{env.BUILD_NAME}}\`** / **\`${{env.BUILD_ID}}\`** - promotion summary."
-          echo ""
-          cat "./build-api-summary.md"
-          echo ""
-          echo " " >> $GITHUB_STEP_SUMMARY
-          echo " " >> $GITHUB_STEP_SUMMARY
+          echo "## Summary " >> GITHUB_STEP_SUMMARY
+          echo "" >> GITHUB_STEP_SUMMARY
+          echo "" >> GITHUB_STEP_SUMMARY
+          echo " - Build name: ${{env.BUILD_NAME}}" >> GITHUB_STEP_SUMMARY
+          echo " - DEV commited build-id: ${{env.DEV_SHORT_COMMITCODE}}" >> GITHUB_STEP_SUMMARY
+          echo " - DEV to TEST merge id: ${{env.TEST_SHORT_COMMITCODE}}" >> GITHUB_STEP_SUMMARY
+          echo " - TEST to PROD merge id: ${{env.PROD_SHORT_COMMITCODE}}" >> GITHUB_STEP_SUMMARY
+          echo "" >> GITHUB_STEP_SUMMARY
+          echo "### Promotion statuses" >> GITHUB_STEP_SUMMARY
+          echo "" >> GITHUB_STEP_SUMMARY
+          jf rt curl -sf "api/build/${{env.BUILD_NAME}}/${{env.BUILD_ID}}" >"${{env.BUILD_INFO_FILE}}"
+          echo "Build info: ${{env.BUILD_INFO_FILE}}"
+          jq -r '.buildInfo.statuses[]? | .status' "${{env.BUILD_INFO_FILE}}" > BUILD_STATUS_RESP
+          echo "| Timestamp (UTC) | Status | User |" >> GITHUB_STEP_SUMMARY
+          echo "| :------ | :------ | :------ |" >> GITHUB_STEP_SUMMARY
+          while IFS= read -r item; do
+            statusVal=$(echo "$item" | jq -r '.status')
+            tsVal=$(echo "$item" | jq -r '.timestamp')
+            usrVal=$(echo "$item" | jq -r '.user')
+            echo "| ${tsVal} | ${statusVal} | ${usrVal} |" >> GITHUB_STEP_SUMMARY
+          done < <(jq -c '.buildInfo.statuses[]?' "${{env.BUILD_INFO_FILE}}")
