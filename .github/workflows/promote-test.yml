@@ -63,6 +63,7 @@ jobs:
       - name: "Promote Summary"
         env:
           BUILD_INFO_FILE: "./build-info.json"
+          BUILD_INFO_URL: "${{env.JF_RT_URL}}/ui/builds/${{env.BUILD_NAME}}/?buildRepo=artifactory-build-info"
         run: |
           echo "# :frog: Summary :pushpin:" >> $GITHUB_STEP_SUMMARY
           echo " " >> $GITHUB_STEP_SUMMARY
