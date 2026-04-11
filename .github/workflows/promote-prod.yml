@@ -1,8 +1,8 @@
-name: "TEST: Build Promote"
+name: "PROD: Build Promote"
 on:
   push:
     branches: 
-      - 'test'
+      - 'main'
 permissions:
   actions: read # for detecting the Github Actions environment.
   id-token: write # for creating OIDC tokens for signing.
@@ -15,23 +15,21 @@ env:
   JOB_SUMMARY: false
   CLI_LOG_LEVEL: DEBUG # DEBUG, INFO, WARN, ERROR
   DEFAULT_WORKSPACE: "${{github.workspace}}" 
-  REPO_LOCAL_TEST: "prbranch-bpr-test-local"
-  # Must match .github/workflows/build-create.yml (DEV publish uses these for build-info)
+  RT_REPO_LOCAL_PROD: "prbranch-bpr-prod-local"
   BUILD_NAME: "prbranch-bpr-app"
-  STATUS_COMMENT: "Promoted from DEV to TEST"
+  STATUS_COMMENT: "Promoted from TEST to PROD"
 
 jobs:
-  buildPromote2Test: 
-    name: "Promote: DEV to TEST"
+  buildPromote2Prod: 
+    name: "Promote: TEST to PROD"
     runs-on: ubuntu-latest
     env:
       BAD_DEPS_DIR: "${{ github.workspace }}/.jfrog/bad-deps"
-      ENV: "test"
     defaults:
         run:
           working-directory: "${{env.DEFAULT_WORKSPACE}}"
     # This will evaluate to true for "TEST", "Test", or "test"
-    if: ${{ github.ref_name == 'test' }}
+    if: ${{ github.ref_name == 'main' }}
     steps:
       - name: "Setup JFrog CLI"
         uses: jfrog/setup-jfrog-cli@v4  # 
@@ -48,7 +46,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: "DEV Build id"
+      - name: "TEST Build id"
         run: |
           chmod -R  755 **/*
           echo "BUILD_ID=$(git rev-parse --short origin/dev)" >> $GITHUB_ENV
@@ -100,11 +98,11 @@ jobs:
 
       - name: "Promote Summary (job summary)"
         run: |
-          {
-            echo "# :frog: Promote pipeline summary"
-            echo ""
-            echo "Build **\`${{env.BUILD_NAME}}\`** / **\`${{env.BUILD_ID}}\`** - promotion summary."
-            echo ""
-            cat "./build-api-summary.md"
-            echo ""
-          } >> GITHUB_STEP_SUMMARY
+          echo "# :frog: Promote pipeline summary"
+          echo ""
+          echo "Build **\`${{env.BUILD_NAME}}\`** / **\`${{env.BUILD_ID}}\`** - promotion summary."
+          echo ""
+          cat "./build-api-summary.md"
+          echo ""
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
