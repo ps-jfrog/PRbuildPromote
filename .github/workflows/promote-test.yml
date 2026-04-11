@@ -100,11 +100,13 @@ jobs:
 
       - name: "Promote Summary (job summary)"
         run: |
-          {
-            echo "# :frog: Promote pipeline summary"
-            echo ""
-            echo "Build **\`${{env.BUILD_NAME}}\`** / **\`${{env.BUILD_ID}}\`** - promotion summary."
-            echo ""
-            cat "./build-api-summary.md"
-            echo ""
-          } >> GITHUB_STEP_SUMMARY
+            {
+              echo "# :frog: Promote pipeline summary"
+              echo ""
+              echo "Build **\`${{env.BUILD_NAME}}\`** / **\`${{env.BUILD_ID}}\`** - promotion summary."
+              echo ""
+              cat "${{env.PROMOTE_CHECKOUT_DIR}}/build-api-summary.md"
+              echo ""
+              
+            } >> "${GITHUB_STEP_SUMMARY}"
+
