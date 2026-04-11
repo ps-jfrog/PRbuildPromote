@@ -46,13 +46,8 @@ case "${branch}" in
     git log test --merges --oneline --no-edit
     git log dev --not test --oneline --no-edit
     git merge-base dev test
-
     ;;
   DEV1)
-    git checkout dev
-    git pull origin dev
-    ;;
-    # Checkout Latest
     git pull origin dev
     git checkout test
 
@@ -60,8 +55,8 @@ case "${branch}" in
     echo "Create PR from dev to test"
     # Create Promotion Branch
     git checkout -b promote/dev-to-test
-    # Merge dev into Promotion Branch (non-interactive: no editor for merge message)
-    git merge dev --no-edit
+    # Merge dev into Promotion Branch
+    git merge dev
     git push origin promote/dev-to-test
 
     # Merge into test
@@ -72,8 +67,6 @@ case "${branch}" in
     # Cleanup 
     git branch -d promote/dev-to-test
     git push origin --delete promote/dev-to-test
-
-    git checkout dev
     ;;
   *)
     echo "Error: Invalid argument."
