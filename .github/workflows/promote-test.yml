@@ -1,0 +1,110 @@
+name: "TEST: Build Promote"
+on:
+  push:
+    branches: 
+      - 'test'
+permissions:
+  actions: read # for detecting the Github Actions environment.
+  id-token: write # for creating OIDC tokens for signing.
+  packages: write # for uploading attestations.
+  contents: read
+  pull-requests: read # merged PR lookup (dev → test) when resolving dev tip SHA
+  security-events: write # Required for uploading code scanning.
+env:
+  JF_RT_URL: "https://psazuse.jfrog.io"
+  JOB_SUMMARY: false
+  CLI_LOG_LEVEL: DEBUG # DEBUG, INFO, WARN, ERROR
+  DEFAULT_WORKSPACE: "${{github.workspace}}" 
+  REPO_LOCAL_TEST: "prbranch-bpr-test-local"
+  # Must match .github/workflows/build-create.yml (DEV publish uses these for build-info)
+  BUILD_NAME: "prbranch-bpr-app"
+  STATUS_COMMENT: "Promoted from DEV to TEST"
+
+jobs:
+  buildPromote2Test: 
+    name: "Promote: DEV to TEST"
+    runs-on: ubuntu-latest
+    env:
+      BAD_DEPS_DIR: "${{ github.workspace }}/.jfrog/bad-deps"
+      ENV: "test"
+    defaults:
+        run:
+          working-directory: "${{env.DEFAULT_WORKSPACE}}"
+    # This will evaluate to true for "TEST", "Test", or "test"
+    if: ${{ github.ref_name == 'test' }}
+    steps:
+      - name: "Setup JFrog CLI"
+        uses: jfrog/setup-jfrog-cli@v4  # 
+        id: jfrog-cli
+        env:
+          JF_URL: ${{env.JF_RT_URL}}
+          JFROG_CLI_LOG_LEVEL: ${{env.CLI_LOG_LEVEL}}
+        with:
+          version: latest 
+          oidc-provider-name: ${{vars.JF_OIDC_PROVIDER_NAME}}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: "DEV Build id"
+        run: |
+          chmod -R  755 **/*
+          echo "BUILD_ID=$(git rev-parse --short origin/dev)" >> $GITHUB_ENV
+          echo "BUILD_ID: ${{env.BUILD_ID}}"
+
+      - name: "Promote to TEST"
+        run: |
+          jf rt bpr "${{ env.BUILD_NAME }}" "${{ env.BUILD_ID }}" "${{ env.REPO_LOCAL_TEST }}" --status="${{ env.STATUS_COMMENT }}"  --include-dependencies --copy
+
+      - name: "Build Status"
+        run: |
+          set -euo pipefail
+          mkdir -p "./files"
+          API_OK=0
+          if jf rt curl -sf "api/build/${{env.BUILD_NAME}}/${{env.BUILD_ID}}" > "./build-info.json"; then
+            API_OK=1
+          else
+            echo "::warning::api/build request failed"
+          fi
+
+          BF="./build-info.json"
+          cat "${BF}"
+          if [[ "${API_OK}" -eq 1 ]] && jq empty "${BF}" 2>/dev/null; then
+            {
+              echo "## Promotion statuses (buildInfo.statuses)"
+              echo ""
+              echo "| Timestamp (UTC) | Status "
+              echo "|-----------------|--------|"
+              jq -r '
+                def fmt_ts:
+                  if . == null or . == "" then "—"
+                  elif type == "string" and test("^[0-9]+$") then (tonumber / 1000 | strftime("%Y-%m-%d %H:%M:%S UTC"))
+                  elif type == "number" then (. / 1000 | strftime("%Y-%m-%d %H:%M:%S UTC"))
+                  else tostring end;
+                (.buildInfo // .).statuses // []
+                | .[]
+                | "| \((.timestamp | fmt_ts)) | \(.status // "—") |"
+              ' "${BF}"
+              echo ""
+            } > "./build-api-summary.md"
+          else
+            {
+              echo "## Build API status"
+              echo ""
+              echo "_Could not load or parse \`api/build/${{env.BUILD_NAME}}/${{env.BUILD_ID}}\` (empty response, non-JSON, or curl failed)._"
+              echo ""
+            } > "./build-api-summary.md"
+          fi
+
+      - name: "Promote Summary (job summary)"
+        run: |
+          {
+            echo "# :frog: Promote pipeline summary"
+            echo ""
+            echo "Build **\`${{env.BUILD_NAME}}\`** / **\`${{env.BUILD_ID}}\`** - promotion summary."
+            echo ""
+            cat "./build-api-summary.md"
+            echo ""
+          } >> GITHUB_STEP_SUMMARY
