@@ -62,6 +62,7 @@ jobs:
       - name: "Promote Summary"
         env:
           BUILD_INFO_FILE: "./build-info.json"
+          BUILD_INFO_URL: "${{env.JF_RT_URL}}/ui/builds/${{env.BUILD_NAME}}/?buildRepo=artifactory-build-info"
         run: |
           echo "# :frog: Summary :pushpin:" >> $GITHUB_STEP_SUMMARY
           echo " " >> $GITHUB_STEP_SUMMARY
@@ -70,6 +71,7 @@ jobs:
           echo " - DEV commited build-id: ${{env.DEV_SHORT_COMMITCODE}}" >> $GITHUB_STEP_SUMMARY
           echo " - DEV to TEST merge id: ${{env.TEST_SHORT_COMMITCODE}}" >> $GITHUB_STEP_SUMMARY
           echo " - TEST to PROD merge id: ${{env.PROD_SHORT_COMMITCODE}}" >> $GITHUB_STEP_SUMMARY
+          echo " - URL: [${{env.BUILD_INFO_URL}}](${{env.BUILD_INFO_URL}})" >> $GITHUB_STEP_SUMMARY
           echo " " >> $GITHUB_STEP_SUMMARY
           echo "### Promotion statuses" >> $GITHUB_STEP_SUMMARY
           echo " " >> $GITHUB_STEP_SUMMARY
