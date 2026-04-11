@@ -64,23 +64,23 @@ jobs:
         env:
           BUILD_INFO_FILE: "./build-info.json"
         run: |
-          echo "## Summary " >> GITHUB_STEP_SUMMARY
-          echo "" >> GITHUB_STEP_SUMMARY
-          echo "" >> GITHUB_STEP_SUMMARY
-          echo " - Build name: ${{env.BUILD_NAME}}" >> GITHUB_STEP_SUMMARY
-          echo " - DEV commited build-id: ${{env.DEV_SHORT_COMMITCODE}}" >> GITHUB_STEP_SUMMARY
-          echo " - DEV to TEST merge id: ${{env.TEST_SHORT_COMMITCODE}}" >> GITHUB_STEP_SUMMARY
-          echo "" >> GITHUB_STEP_SUMMARY
-          echo "### Promotion statuses" >> GITHUB_STEP_SUMMARY
-          echo "" >> GITHUB_STEP_SUMMARY
+          echo "# :frog: Summary :pushpin:" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo " - Build name: ${{env.BUILD_NAME}}" >> $GITHUB_STEP_SUMMARY
+          echo " - DEV commited build-id: ${{env.DEV_SHORT_COMMITCODE}}" >> $GITHUB_STEP_SUMMARY
+          echo " - DEV to TEST merge id: ${{env.TEST_SHORT_COMMITCODE}}" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo "### Promotion statuses" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
           jf rt curl -sf "api/build/${{env.BUILD_NAME}}/${{env.BUILD_ID}}" >"${{env.BUILD_INFO_FILE}}"
           echo "Build info: ${{env.BUILD_INFO_FILE}}"
           jq -r '.buildInfo.statuses[]? | .status' "${{env.BUILD_INFO_FILE}}" > BUILD_STATUS_RESP
-          echo "| Timestamp (UTC) | Status | User |" >> GITHUB_STEP_SUMMARY
-          echo "| :------ | :------ | :------ |" >> GITHUB_STEP_SUMMARY
+          echo "| Timestamp (UTC) | Status | User | " >> $GITHUB_STEP_SUMMARY
+          echo "| :------ | :------ | :------ | " >> $GITHUB_STEP_SUMMARY
           while IFS= read -r item; do
             statusVal=$(echo "$item" | jq -r '.status')
             tsVal=$(echo "$item" | jq -r '.timestamp')
             usrVal=$(echo "$item" | jq -r '.user')
-            echo "| ${tsVal} | ${statusVal} | ${usrVal} |" >> GITHUB_STEP_SUMMARY
+            echo "| ${tsVal} | ${statusVal} | ${usrVal} | " >> $GITHUB_STEP_SUMMARY
           done < <(jq -c '.buildInfo.statuses[]?' "${{env.BUILD_INFO_FILE}}")
