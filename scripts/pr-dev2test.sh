@@ -1,10 +1,10 @@
 #!/bin/bash
-branch=${1:-"dev2"}
+branch=${1:-"dev"}
 
 #branch=$(echo "${arg}" | tr '[:lower:]' '[:upper:]' | xargs)
-echo "current branch: ${branch}"
 # Check if the current branch is dev
 branch=$(git branch --show-current | tr '[:lower:]' '[:upper:]' | xargs)
+echo "current branch: ${branch}"
 case "${branch}" in
   TESTINFO|TEST-INFO)
     echo "Test information"
@@ -47,7 +47,7 @@ case "${branch}" in
     git log dev --not test --oneline --no-edit
     git merge-base dev test
     ;;
-  DEV1)
+  DEV)
     git pull origin dev
     git checkout test
 
@@ -61,7 +61,7 @@ case "${branch}" in
 
     # Merge into test
     git checkout test
-    git merge --no-ff promote/dev-to-test -m "no-ff: Promote dev to test"
+    git merge --no-ff promote/dev-to-test -m "Promote dev to test"
     git push origin test
 
     # Cleanup 
