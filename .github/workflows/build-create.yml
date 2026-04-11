@@ -14,7 +14,7 @@ env:
   JOB_SUMMARY: false
   CLI_LOG_LEVEL: DEBUG # DEBUG, INFO, WARN, ERROR
   DEFAULT_WORKSPACE: "${{github.workspace}}" 
-  BUILD_ID: "${{github.run_number}}.0"
+  # BUILD_ID: "${{github.run_number}}.0"
   BUILD_NAME: "prbranch-bpr-app" 
   MODULE_NAME: "py-artifacts"
   RT_REPO_VIRTUAL: "prbranch-bpr-virtual"
@@ -53,6 +53,10 @@ jobs:
           run: | 
               tree .
               chmod -R 755 **/*
+              echo "DEV_SHORT_COMMITCODE=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+              echo "DEV_FULL_COMMITCODE=$(git rev-parse HEAD)" >> $GITHUB_ENV
+              echo "TODAYS_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+              echo "BUILD_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
         - name: "JF Show"
           run: | 
@@ -67,6 +71,10 @@ jobs:
             echo "    - $(jf --version) " >> $GITHUB_STEP_SUMMARY
             echo "    - $(python3 -V) " >> $GITHUB_STEP_SUMMARY
             echo "    - $(pip3 -V) " >> $GITHUB_STEP_SUMMARY
+            echo " - GIT info " >> $GITHUB_STEP_SUMMARY
+            echo "    - short commit hash: ${{env.DEV_SHORT_COMMITCODE}} " >> $GITHUB_STEP_SUMMARY
+            echo "    - full commit hash: ${{env.DEV_FULL_COMMITCODE}} " >> $GITHUB_STEP_SUMMARY
+            echo "    - DEV build date: ${{env.TODAYS_DATE}} " >> $GITHUB_STEP_SUMMARY
             echo " " >> $GITHUB_STEP_SUMMARY
             echo " " >> $GITHUB_STEP_SUMMARY
             
@@ -84,6 +92,10 @@ jobs:
             mkdir -p "${BAD_DEPS_DIR}"
             jf pip download -r requirements.txt -d "${BAD_DEPS_DIR}"
 
+        - name: "GIT commit info"
+          run: |
+            jf rt sp "short_hash=${{env.DEV_SHORT_COMMITCODE}};full_hash=${{env.DEV_FULL_COMMITCODE}};build_date=${{env.TODAYS_DATE}};" --build="${{env.BUILD_NAME}}/${{env.BUILD_ID}}"
+            
         - name: "Build info"
           run: |
             jf rt bag "${{env.BUILD_NAME}}" "${{env.BUILD_ID}}"
