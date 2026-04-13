@@ -92,6 +92,13 @@ jobs:
           set -euo pipefail
           mkdir -p "${BAD_DEPS_DIR}"
           jf pip download -r requirements.txt -d "${BAD_DEPS_DIR}"
+      
+      - name: "Generate Python SBOM"
+        uses: CycloneDX/gh-python-generate-sbom@v2
+        with:
+          input: ./requirements.txt
+          output: ./bom.json
+          format: json
 
       - name: "GIT commit info"
         run: |
@@ -109,8 +116,45 @@ jobs:
         run: |
           jf bs ${{env.BUILD_NAME}} ${{env.BUILD_ID}} --format=table --extended-table --vuln --rescan
 
+      # Evidence - Build references
+      #     Docs# https://jfrog.com/help/r/jfrog-artifactory-documentation/evidence-management
+      #     CLI# https://docs.jfrog-applications.jfrog.io/jfrog-applications/jfrog-cli/binaries-management-with-jfrog-artifactory/evidence-service
+      - name: "Evidence: Build Publish"
+        env:
+          EVIDENCE_SPEC_JSON: 'evd-spec-info.json'  # ref https://jfrog.com/help/r/jfrog-artifactory-documentation/evidence-setup
+        run: |
+          echo '{ "actor": "${{github.actor}}", "pipeline": "github actions","build_name": "${{env.BUILD_NAME}}", "build_id": "${{env.BUILD_ID}}", "evd": "Evidence-BuildPublish"}' > ./${{env.EVIDENCE_SPEC_JSON}}
+          cat ./${{env.EVIDENCE_SPEC_JSON}}
+          jf evd create --build-name ${{env.BUILD_NAME}} --build-number ${{env.BUILD_ID}} --predicate ./${{env.EVIDENCE_SPEC_JSON}} --predicate-type https://jfrog.com/evidence/signature/v1 --key "${{secrets.KRISHNAM_JFROG_EVD_PRIVATEKEY}}" --key-alias ${{secrets.EVIDENCE_KEY_ALIAS}}
+
       - name: "Promote: INIT to DEV repo"
         env:
           STATUS_COMMENT: "Promoted from INIT to DEV"
         run: |
           jf rt bpr "${{ env.BUILD_NAME }}" "${{ env.BUILD_ID }}" "${{ env.RT_REPO_LOCAL_DEV }}" --status="${{ env.STATUS_COMMENT }}"  --include-dependencies --copy
+
+      - name: "Promote Summary"
+        env:
+          BUILD_INFO_FILE: "./build-info.json"
+          BUILD_INFO_URL: "${{env.JF_RT_URL}}/ui/builds/${{env.BUILD_NAME}}/?buildRepo=artifactory-build-info"
+        run: |
+          echo "# :frog: Summary :pushpin:" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo " - Build name: ${{env.BUILD_NAME}}" >> $GITHUB_STEP_SUMMARY
+          echo " - DEV commited build-id: ${{env.DEV_SHORT_COMMITCODE}}" >> $GITHUB_STEP_SUMMARY
+          echo " - URL: [${{env.BUILD_INFO_URL}}](${{env.BUILD_INFO_URL}})" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          echo "### Promotion statuses" >> $GITHUB_STEP_SUMMARY
+          echo " " >> $GITHUB_STEP_SUMMARY
+          jf rt curl -sf "api/build/${{env.BUILD_NAME}}/${{env.BUILD_ID}}" >"${{env.BUILD_INFO_FILE}}"
+          echo "Build info: ${{env.BUILD_INFO_FILE}}"
+          jq -r '.buildInfo.statuses[]? | .status' "${{env.BUILD_INFO_FILE}}" > BUILD_STATUS_RESP
+          echo "| Timestamp (UTC) | Status | User | " >> $GITHUB_STEP_SUMMARY
+          echo "| :------ | :------ | :------ | " >> $GITHUB_STEP_SUMMARY
+          while IFS= read -r item; do
+            statusVal=$(echo "$item" | jq -r '.status')
+            tsVal=$(echo "$item" | jq -r '.timestamp')
+            usrVal=$(echo "$item" | jq -r '.user')
+            echo "| ${tsVal} | ${statusVal} | ${usrVal} | " >> $GITHUB_STEP_SUMMARY
+          done < <(jq -c '.buildInfo.statuses[]?' "${{env.BUILD_INFO_FILE}}")
