@@ -24,5 +24,3 @@ echo "DEV branch short sha: $(git rev-parse --short origin/dev)"
 # Cleanup 
 git branch -d promote/dev-to-test
 git push origin --delete promote/dev-to-test
-
-
