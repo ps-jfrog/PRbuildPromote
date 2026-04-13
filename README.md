@@ -33,10 +33,12 @@ sequenceDiagram
     end
     loop DEV to TEST pr
         pr->>vcs: Creates a PR from the DEV branch and merges it into the TEST branch using ./scripts/pr-dev2test.sh (promote/dev-to-test).
+        vcs->>action: Triggers the promote-test.yml pipeline for a merge on the TEST branch.
         action->>repos: The promote-test.yaml pipeline runs and transfers the artifact from dev-local to qa-local, adding a status comment: “Promoted from DEV (DEV_COMMIT_SHORT_SHA) to TEST (MERGE_COMMIT_SHORT_SHA).”
     end
     loop TEST to MAIN pr
         pr->>vcs: Creates a PR from the TEST branch and merges it into the MAIN branch using ./scripts/pr-test2prod.sh (promote/test-to-main).
+        vcs->>action: Triggers the promote-prod.yml pipeline for a merge on the MAIN branch.
         action->>repos: The promote-prod.yaml pipeline runs and transfers the artifact from qa-local to prod-local, adding a status comment: “Promoted from TEST (MERGE_COMMIT_SHORT_SHA) to PROD (MERGE_COMMIT_SHORT_SHA).”
     end
 ```
