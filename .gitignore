@@ -208,3 +208,12 @@ __marimo__/
 
 .jfrog/
 actionlint
+
+.DS_Store
+Thumbs.db
+**/.DS_Store
+**/Thumbs.db
+*.bkp
+**/*.bkp
+*.dtmp
+**/*.dtmp

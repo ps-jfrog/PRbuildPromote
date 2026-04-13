@@ -17,3 +17,38 @@ This representation enforces promotion over rebuild, ensures traceability across
  - **branch TEST**: git merged from DEV, Artifactory build promoted to _prbranch-bpr-test-local_ [![DEV 2 TEST: Build Promote](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/promote-test.yml/badge.svg)](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/promote-test.yml)
  - **branch MAIN**: git merged from TEST, Artifactory build promoted to _prbranch-bpr-prod-local_ [![TEST 2 PROD: Build Promote](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/promote-prod.yml/badge.svg)](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/promote-prod.yml)
 
+### Sequence Flow
+```mermaid
+sequenceDiagram
+    autonumber
+    participant code as Code
+    participant pr as Terminal CLI-PR
+    participant vcs as GIT VCS
+    participant action as GITHUB ACTIONS
+    participant repos as REPO Management
+    loop developer build code
+        code->>vcs: A developer commits code to the DEV branch in Git.
+        vcs->>action: Triggers the build-create.yml pipeline for a commit on the DEV branch.
+        action->>repos: Creates an artifact, uploads it to init-local, and then promotes it to dev-local.
+    end
+    loop DEV to TEST pr
+        pr->>vcs: Creates a PR from the DEV branch and merges it into the TEST branch using ./scripts/pr-dev2test.sh (promote/dev-to-test).
+        action->>repos: The promote-test.yaml pipeline runs and transfers the artifact from dev-local to qa-local, adding a status comment: “Promoted from DEV (DEV_COMMIT_SHORT_SHA) to TEST (MERGE_COMMIT_SHORT_SHA).”
+    end
+    loop TEST to MAIN pr
+        pr->>vcs: Creates a PR from the TEST branch and merges it into the MAIN branch using ./scripts/pr-test2prod.sh (promote/test-to-main).
+        action->>repos: The promote-prod.yaml pipeline runs and transfers the artifact from qa-local to prod-local, adding a status comment: “Promoted from TEST (MERGE_COMMIT_SHORT_SHA) to PROD (MERGE_COMMIT_SHORT_SHA).”
+    end
+```
+
+## Screenshots
+
+### Repo structure
+![Repos](./images/repos.png)
+
+### Builds
+![Builds](./images/builds.png)
+![Publish Module](./images/pubmodule.png)
+![Release History](./images/relhistory.png)
+![VCS](./images/vcs.png)
+![Build Info](./images/buildinfo.png)
