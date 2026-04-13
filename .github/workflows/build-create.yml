@@ -127,10 +127,6 @@ jobs:
           cat ./${{env.EVIDENCE_SPEC_JSON}}
           jf evd create --predicate ./${{env.EVIDENCE_SPEC_JSON}} --predicate-type https://jfrog.com/evidence/signature/v1 --build-name ${{env.BUILD_NAME}} --build-number ${{env.BUILD_ID}} --key "${{secrets.KRISHNAM_JFROG_EVD_PRIVATEKEY}}" --key-alias ${{secrets.EVIDENCE_KEY_ALIAS}}
 
-          jf evd create --predicate file-path --predicate-type predicate-type-uri --build-name <name> --build-number <version-number> 
-           --key <local-private-key-path> --key-alias <public-key-name> 
-
-
       - name: "Promote: INIT to DEV repo"
         env:
           STATUS_COMMENT: "Promoted from INIT to DEV"
