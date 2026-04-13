@@ -52,6 +52,11 @@ jobs:
           echo "DEV_SHORT_COMMITCODE=$(git rev-parse --short origin/dev)" >> $GITHUB_ENV
           echo "TEST_SHORT_COMMITCODE=$(git rev-parse --short origin/test)" >> $GITHUB_ENV
           echo "PROD_SHORT_COMMITCODE=$(git rev-parse --short origin/main)" >> $GITHUB_ENV
+        
+      - name: "Xray: build scan"
+        continue-on-error: true
+        run: |
+          jf bs ${{env.BUILD_NAME}} ${{env.BUILD_ID}} --format=table --extended-table --vuln --rescan
 
       - name: "Promote to PROD"
         env:
@@ -64,7 +69,7 @@ jobs:
           BUILD_INFO_FILE: "./build-info.json"
           BUILD_INFO_URL: "${{env.JF_RT_URL}}/ui/builds/${{env.BUILD_NAME}}/?buildRepo=artifactory-build-info"
         run: |
-          echo "# :frog: Summary :pushpin:" >> $GITHUB_STEP_SUMMARY
+          echo "# :frog: Promote QA 2 PROD Summary :pushpin:" >> $GITHUB_STEP_SUMMARY
           echo " " >> $GITHUB_STEP_SUMMARY
           echo " " >> $GITHUB_STEP_SUMMARY
           echo " - Build name: ${{env.BUILD_NAME}}" >> $GITHUB_STEP_SUMMARY
