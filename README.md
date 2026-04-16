@@ -16,6 +16,7 @@ This representation enforces promotion over rebuild, ensures traceability across
  - **branch DEV**: Artifactory create and build published to _prbranch-bpr-dev-local_ [![DEV: Build Create](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/build-create.yml/badge.svg)](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/build-create.yml)
  - **branch TEST**: git merged from DEV, Artifactory build promoted to _prbranch-bpr-test-local_ [![DEV 2 TEST: Build Promote](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/promote-test.yml/badge.svg)](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/promote-test.yml)
  - **branch MAIN**: git merged from TEST, Artifactory build promoted to _prbranch-bpr-prod-local_ [![TEST 2 PROD: Build Promote](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/promote-prod.yml/badge.svg)](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/promote-prod.yml)
+ - **FrogBot**: [![Frogbot: Scan and Fix](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/frogbot-scan-repo.yml/badge.svg)](https://github.com/ps-jfrog/PRbuildPromote/actions/workflows/frogbot-scan-repo.yml)
 
 ### Sequence Flow
 ```mermaid
