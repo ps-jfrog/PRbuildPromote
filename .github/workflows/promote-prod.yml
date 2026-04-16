@@ -31,7 +31,7 @@ jobs:
     if: ${{ github.ref_name == 'main' }}
     steps:
       - name: "Setup JFrog CLI"
-        uses: jfrog/setup-jfrog-cli@v4  # 
+        uses: jfrog/setup-jfrog-cli@v5  # 
         id: jfrog-cli
         env:
           JF_URL: ${{env.JF_RT_URL}}
